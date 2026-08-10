@@ -11,16 +11,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     container:
-      image: devkitpro/devkita64:latest
+      image: devkitpro/devkita64:20260219
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Switch dependencies
+      - name: Check dependencies
         run: |
-          dkp-pacman -Syu --noconfirm \
+          dkp-pacman -Q \
             switch-curl \
             switch-sdl2 \
             switch-sdl2_ttf \
