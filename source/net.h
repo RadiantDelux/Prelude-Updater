@@ -1,7 +1,6 @@
 #ifndef PRELUDE_UPDATER_NET_H
 #define PRELUDE_UPDATER_NET_H
 
-#include <switch.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -15,17 +14,20 @@
 #define NET_ERR_WRITE     -7
 #define NET_ERR_REDIRECT  -8
 #define NET_ERR_URL       -9
+#define NET_ERR_ABORTED  -10
+
+typedef int (*NetProgressCallback)(long downloaded, long total, void *user);
 
 /*
- * HTTPS helpers for Nintendo Switch/libnx.
- * Both functions initialize and shut down socket + ssl services internally.
- * Redirects (301/302/303/307/308) are followed up to 5 hops.
+ * HTTPS helpers backed by devkitPro switch-curl.
+ * libcurl handles redirects, buffering, TLS verification and streaming.
  */
 unsigned char *net_https_get_url(const char *url, size_t *out_len,
                                  int *out_status, int *out_error);
 
 long net_https_download_url(const char *url, FILE *out,
-                            int *out_status, int *out_error);
+                            int *out_status, int *out_error,
+                            NetProgressCallback progress_cb, void *progress_user);
 
 const char *net_error_string(int error);
 

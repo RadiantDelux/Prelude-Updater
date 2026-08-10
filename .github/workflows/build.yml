@@ -18,6 +18,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Switch dependencies
+        run: |
+          dkp-pacman -Syu --noconfirm \
+            switch-curl \
+            switch-sdl2 \
+            switch-sdl2_ttf \
+            switch-freetype \
+            switch-harfbuzz \
+            switch-zlib
+
       - name: Build
         run: make -j$(nproc)
 

@@ -1,6 +1,6 @@
 /*
  * Prelude Updater
- * Copyright (C) 2026 Prelude Updater contributors.
+ * Copyright (C) 2026 RadiantDelux.
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Affero General Public License as published by
@@ -24,6 +24,7 @@
 #define TMP_PATH         UPDATER_DATA_DIR "/nextendo.nro.new"
 #define BACKUP_PATH      UPDATER_DATA_DIR "/nextendo.nro.bak"
 #define MIN_NRO_SIZE     4096
+#define COPY_BUFFER_SIZE (1024 * 1024)
 
 static bool file_size(const char *path, long *out_size) {
     struct stat st;
@@ -161,15 +162,20 @@ static bool copy_file(const char *src_path, const char *dst_path) {
     FILE *dst = fopen(dst_path, "wb");
     if (!dst) { fclose(src); return false; }
 
-    unsigned char buf[32768];
+    unsigned char *buf = (unsigned char *)malloc(COPY_BUFFER_SIZE);
+    if (!buf) { fclose(src); fclose(dst); return false; }
+    setvbuf(src, NULL, _IOFBF, COPY_BUFFER_SIZE);
+    setvbuf(dst, NULL, _IOFBF, COPY_BUFFER_SIZE);
+
     size_t n;
     bool ok = true;
-    while ((n = fread(buf, 1, sizeof(buf), src)) > 0) {
+    while ((n = fread(buf, 1, COPY_BUFFER_SIZE, src)) > 0) {
         if (fwrite(buf, 1, n, dst) != n) { ok = false; break; }
     }
     if (ferror(src)) ok = false;
     if (fflush(dst) != 0) ok = false;
 
+    free(buf);
     fclose(src);
     fclose(dst);
     fsdevCommitDevice("sdmc");
@@ -237,23 +243,43 @@ UpdateInfo updater_check(void) {
     return info;
 }
 
-UpdateResult updater_install(const UpdateInfo *info) {
+typedef struct {
+    UpdaterProgressCallback cb;
+    void *user;
+    long expected;
+} ProgressBridge;
+
+static int progress_bridge(long downloaded, long total, void *user) {
+    ProgressBridge *bridge = (ProgressBridge *)user;
+    if (!bridge || !bridge->cb) return 0;
+    long effective_total = total > 0 ? total : bridge->expected;
+    return bridge->cb(downloaded, effective_total, bridge->user) ? 0 : 1;
+}
+
+UpdateResult updater_install(const UpdateInfo *info,
+                             UpdaterProgressCallback progress_cb,
+                             void *progress_user) {
     if (!info || !info->ok || !info->latest_tag[0] || !info->download_url[0]) return UPDATE_ERR_HTTP;
     if (!ensure_dirs()) return UPDATE_ERR_SD;
 
     remove(TMP_PATH);
     FILE *out = fopen(TMP_PATH, "wb");
     if (!out) return UPDATE_ERR_SD;
+    setvbuf(out, NULL, _IOFBF, COPY_BUFFER_SIZE);
 
+    ProgressBridge bridge = { progress_cb, progress_user, info->remote_size };
     int status = 0;
     int net_error = NET_ERR_UNKNOWN;
-    long bytes = net_https_download_url(info->download_url, out, &status, &net_error);
+    long bytes = net_https_download_url(info->download_url, out, &status, &net_error,
+                                        progress_cb ? progress_bridge : NULL,
+                                        progress_cb ? &bridge : NULL);
     bool flush_ok = fflush(out) == 0;
     fclose(out);
     fsdevCommitDevice("sdmc");
 
     if (bytes < 0 || net_error != NET_OK) {
         remove(TMP_PATH);
+        if (net_error == NET_ERR_ABORTED) return UPDATE_ERR_CANCELLED;
         return net_error == NET_ERR_WRITE ? UPDATE_ERR_SD : UPDATE_ERR_NETWORK;
     }
     if (status != 200) {
@@ -271,44 +297,69 @@ UpdateResult updater_install(const UpdateInfo *info) {
         return UPDATE_ERR_SIZE;
     }
 
+    /*
+     * Fast path: move files inside the same FAT filesystem instead of copying
+     * 20+ MiB two extra times. Some FAT implementations/cards reject rename(),
+     * so every move has a safe copy fallback.
+     */
     bool had_target = false;
+    bool backup_was_move = false;
     long old_size = 0;
     if (file_size(PRELUDE_TARGET_PATH, &old_size)) {
         had_target = true;
         remove(BACKUP_PATH);
-        if (!copy_file(PRELUDE_TARGET_PATH, BACKUP_PATH)) {
+        if (rename(PRELUDE_TARGET_PATH, BACKUP_PATH) == 0) {
+            backup_was_move = true;
+        } else if (!copy_file(PRELUDE_TARGET_PATH, BACKUP_PATH)) {
             remove(TMP_PATH);
             remove(BACKUP_PATH);
             return UPDATE_ERR_BACKUP;
         }
     }
 
-    if (!copy_file(TMP_PATH, PRELUDE_TARGET_PATH)) {
-        if (had_target) copy_file(BACKUP_PATH, PRELUDE_TARGET_PATH);
-        else remove(PRELUDE_TARGET_PATH);
+    /* If backup was copied, remove old target now that recovery is guaranteed. */
+    if (had_target && !backup_was_move) {
+        if (remove(PRELUDE_TARGET_PATH) != 0 && errno != ENOENT) {
+            remove(TMP_PATH);
+            return UPDATE_ERR_INSTALL;
+        }
+        fsdevCommitDevice("sdmc");
+    }
+
+    bool installed_by_move = false;
+    if (rename(TMP_PATH, PRELUDE_TARGET_PATH) == 0) {
+        installed_by_move = true;
+    } else if (!copy_file(TMP_PATH, PRELUDE_TARGET_PATH)) {
+        remove(PRELUDE_TARGET_PATH);
+        if (had_target) {
+            if (rename(BACKUP_PATH, PRELUDE_TARGET_PATH) != 0)
+                copy_file(BACKUP_PATH, PRELUDE_TARGET_PATH);
+        }
         remove(TMP_PATH);
         return UPDATE_ERR_INSTALL;
     }
 
     long installed_size = 0;
     if (!file_size(PRELUDE_TARGET_PATH, &installed_size) || installed_size != info->remote_size) {
-        if (had_target) copy_file(BACKUP_PATH, PRELUDE_TARGET_PATH);
-        else remove(PRELUDE_TARGET_PATH);
-        remove(TMP_PATH);
+        remove(PRELUDE_TARGET_PATH);
+        if (had_target) {
+            if (rename(BACKUP_PATH, PRELUDE_TARGET_PATH) != 0)
+                copy_file(BACKUP_PATH, PRELUDE_TARGET_PATH);
+        }
+        if (!installed_by_move) remove(TMP_PATH);
         return UPDATE_ERR_INSTALL;
     }
 
     fsdevCommitDevice("sdmc");
 
     if (!write_state(info->latest_tag)) {
-        /* Prelude is installed correctly; report state failure separately. */
-        remove(TMP_PATH);
+        if (!installed_by_move) remove(TMP_PATH);
         remove(BACKUP_PATH);
         fsdevCommitDevice("sdmc");
         return UPDATE_ERR_STATE;
     }
 
-    remove(TMP_PATH);
+    if (!installed_by_move) remove(TMP_PATH);
     remove(BACKUP_PATH);
     fsdevCommitDevice("sdmc");
     return UPDATE_OK;
@@ -324,6 +375,7 @@ const char *updater_result_string(UpdateResult result) {
         case UPDATE_ERR_BACKUP: return "No se pudo crear una copia de seguridad del Prelude actual.";
         case UPDATE_ERR_INSTALL: return "No se pudo sustituir nextendo.nro; se intento restaurar la copia anterior.";
         case UPDATE_ERR_STATE: return "Prelude se actualizo, pero no se pudo guardar la version instalada.";
+        case UPDATE_ERR_CANCELLED: return "Descarga cancelada.";
         default: return "Error desconocido.";
     }
 }

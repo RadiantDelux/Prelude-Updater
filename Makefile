@@ -1,5 +1,5 @@
 # Prelude Updater - Nintendo Switch homebrew
-# Requires devkitA64 + libnx.
+# Requires devkitA64 + libnx + switch-curl + switch-sdl2 + switch-sdl2_ttf.
 
 .SUFFIXES:
 
@@ -16,18 +16,22 @@ SOURCES  := source
 INCLUDES := source
 
 APP_TITLE   := Prelude Updater
-APP_AUTHOR  := Prelude Updater contributors
-APP_VERSION := 1.0.0
-NO_ICON     := 1
+APP_AUTHOR  := RadiantDelux
+APP_VERSION := 1.1.0
+APP_ICON    := icon.jpg
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
+PKGCONF := PKG_CONFIG_PATH=$(PORTLIBS)/lib/pkgconfig pkg-config
+PORTLIB_CFLAGS := $(shell $(PKGCONF) --cflags SDL2_ttf libcurl 2>/dev/null)
+PORTLIB_LIBS   := $(shell $(PKGCONF) --static --libs SDL2_ttf libcurl 2>/dev/null)
+
 CFLAGS := -g -Wall -Wextra -O2 -ffunction-sections -fstack-protector-strong -D_FORTIFY_SOURCE=2 $(ARCH) $(DEFINES)
-CFLAGS += $(INCLUDE) -D__SWITCH__
+CFLAGS += $(INCLUDE) $(PORTLIB_CFLAGS) -D__SWITCH__
 CXXFLAGS := $(CFLAGS) -fno-rtti -fno-exceptions
 ASFLAGS := -g $(ARCH)
 LDFLAGS = -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
-LIBS := -lnx
-LIBDIRS := $(LIBNX)
+LIBS := $(PORTLIB_LIBS) -lnx -lm
+LIBDIRS := $(PORTLIBS) $(LIBNX)
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 
@@ -52,6 +56,8 @@ export INCLUDE := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
                   $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
                   -I$(CURDIR)/$(BUILD)
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+
+export NROFLAGS += --icon=$(CURDIR)/$(APP_ICON)
 
 .PHONY: $(BUILD) clean all
 

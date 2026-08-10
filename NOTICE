@@ -1,8 +1,10 @@
 Prelude Updater
+Copyright (C) 2026 RadiantDelux
 
-Includes network transport code derived from Prelude-Nro:
-https://github.com/NextendoNetwork/Prelude-Nro
-Copyright (C) 2026 Nextendo Network
-Licensed under GNU Affero General Public License v3 or later.
+Licensed under the GNU Affero General Public License, version 3 or later.
 
-Modifications and updater-specific code: 2026 Prelude Updater contributors.
+This program updates the public Prelude-Nro homebrew distributed by Nextendo Network.
+Prelude-Nro is Copyright (C) 2026 Nextendo Network and is distributed under AGPL-3.0-or-later.
+
+Nintendo Switch and Nintendo are trademarks of Nintendo. This project is not affiliated with,
+endorsed by, or connected to Nintendo or Nextendo Network.

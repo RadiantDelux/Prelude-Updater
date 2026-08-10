@@ -1,140 +1,121 @@
 /*
  * Prelude Updater
- * Copyright (C) 2026 Prelude Updater contributors.
+ * Copyright (C) 2026 RadiantDelux.
  * AGPL-3.0-or-later
  */
 
 #include <switch.h>
+#include <stdbool.h>
 #include <stdio.h>
-#include <string.h>
 
+#include "ui.h"
 #include "updater.h"
 
-#define UPDATER_VERSION "1.0.0"
+#define FRAME_NS 16666667L
 
-static void clear_screen(void) {
-    printf("\x1b[2J\x1b[1;1H");
+typedef struct {
+    PadState *pad;
+    const char *tag;
+    long expected_total;
+} DownloadUiContext;
+
+static void sleep_frame(void) {
+    svcSleepThread(FRAME_NS);
 }
 
-static void print_header(void) {
-    printf("========================================\n");
-    printf("          PRELUDE UPDATER v%s\n", UPDATER_VERSION);
-    printf("========================================\n\n");
+static bool wait_exit(PadState *pad) {
+    while (appletMainLoop()) {
+        ui_pump();
+        padUpdate(pad);
+        if (padGetButtonsDown(pad) & HidNpadButton_Plus) return true;
+        sleep_frame();
+    }
+    return false;
 }
 
-static void wait_for_exit(PadState *pad) {
-    printf("\n[+] Salir\n");
+static bool download_progress(long downloaded, long total, void *user) {
+    DownloadUiContext *ctx = (DownloadUiContext *)user;
+    if (!ctx || !ctx->pad) return true;
+
+    ui_pump();
+    padUpdate(ctx->pad);
+    if (padGetButtonsDown(ctx->pad) & HidNpadButton_B) return false;
+    if (!appletMainLoop()) return false;
+
+    long effective_total = total > 0 ? total : ctx->expected_total;
+    ui_draw_download_progress(ctx->tag, downloaded, effective_total, false);
+    return true;
+}
+
+static int console_fallback(PadState *pad) {
+    consoleInit(NULL);
+    printf("Prelude Updater\n\n");
+    printf("No se pudo iniciar la interfaz grafica.\n");
+    printf("Comprueba que el NRO fue compilado con SDL2/SDL2_ttf.\n\n");
+    printf("Pulsa + para salir.\n");
     consoleUpdate(NULL);
     while (appletMainLoop()) {
         padUpdate(pad);
         if (padGetButtonsDown(pad) & HidNpadButton_Plus) break;
         consoleUpdate(NULL);
+        sleep_frame();
     }
+    consoleExit(NULL);
+    return 0;
 }
 
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    consoleInit(NULL);
-
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     PadState pad;
     padInitializeDefault(&pad);
 
-    clear_screen();
-    print_header();
-    printf("Consultando la ultima release de Prelude...\n");
-    consoleUpdate(NULL);
+    if (!ui_init()) return console_fallback(&pad);
 
+    ui_draw_checking();
     UpdateInfo info = updater_check();
 
-    clear_screen();
-    print_header();
-
     if (!info.ok) {
-        printf("ERROR\n\n%s\n", info.error[0] ? info.error : "No se pudo comprobar la actualizacion.");
-        if (info.http_status) printf("HTTP: %d\n", info.http_status);
-        wait_for_exit(&pad);
-        consoleExit(NULL);
+        ui_draw_error(info.error[0] ? info.error : "No se pudo consultar GitHub.", info.http_status);
+        wait_exit(&pad);
+        ui_exit();
         return 0;
     }
 
-    printf("Destino:       /switch/nextendo.nro\n");
-    printf("Instalada:     %s\n", info.target_exists ? info.installed_tag : "no instalada");
-    printf("Ultima GitHub: %s\n", info.latest_tag);
-    printf("Tamano remoto: %ld bytes\n", info.remote_size);
-    if (info.target_exists) printf("Tamano local:  %ld bytes\n", info.local_size);
-    printf("\n");
+    ui_draw_info(&info);
 
-    if (!info.update_available) {
-        printf("Prelude ya esta actualizado.\n\n");
-        printf("[X] Reinstalar %s\n", info.latest_tag);
-        printf("[+] Salir\n");
-        consoleUpdate(NULL);
+    bool install = false;
+    while (appletMainLoop()) {
+        ui_pump();
+        padUpdate(&pad);
+        u64 down = padGetButtonsDown(&pad);
 
-        bool reinstall = false;
-        while (appletMainLoop()) {
-            padUpdate(&pad);
-            u64 down = padGetButtonsDown(&pad);
-            if (down & HidNpadButton_Plus) break;
-            if (down & HidNpadButton_X) { reinstall = true; break; }
-            consoleUpdate(NULL);
+        if (down & HidNpadButton_Plus) break;
+        if (info.update_available && (down & HidNpadButton_A)) {
+            install = true;
+            break;
         }
-        if (!reinstall) {
-            consoleExit(NULL);
-            return 0;
+        if (info.update_available && (down & HidNpadButton_B)) break;
+        if (!info.update_available && (down & HidNpadButton_X)) {
+            install = true;
+            break;
         }
-    } else {
-        if (!info.installed_version_known && info.target_exists) {
-            printf("La version local no fue instalada por este updater,\n");
-            printf("asi que se ofrece instalar la release actual.\n\n");
-        } else if (!info.target_exists) {
-            printf("Prelude no esta instalado.\n\n");
-        } else if (strcmp(info.installed_tag, info.latest_tag) == 0 && info.local_size != info.remote_size) {
-            printf("La version coincide, pero el tamano del NRO no.\n");
-            printf("Se recomienda reinstalar.\n\n");
-        } else {
-            printf("Hay una actualizacion disponible.\n\n");
-        }
-
-        printf("[A] Instalar %s\n", info.latest_tag);
-        printf("[B] Cancelar\n");
-        printf("[+] Salir\n");
-        consoleUpdate(NULL);
-
-        bool install = false;
-        while (appletMainLoop()) {
-            padUpdate(&pad);
-            u64 down = padGetButtonsDown(&pad);
-            if (down & HidNpadButton_A) { install = true; break; }
-            if (down & HidNpadButton_B) break;
-            if (down & HidNpadButton_Plus) break;
-            consoleUpdate(NULL);
-        }
-        if (!install) {
-            consoleExit(NULL);
-            return 0;
-        }
+        sleep_frame();
     }
 
-    clear_screen();
-    print_header();
-    printf("Descargando %s...\n", info.latest_tag);
-    printf("No apagues la consola ni retires la SD.\n\n");
-    consoleUpdate(NULL);
-
-    UpdateResult result = updater_install(&info);
-
-    if (result == UPDATE_OK || result == UPDATE_ERR_STATE) {
-        printf("%s\n", updater_result_string(result));
-        printf("\nPrelude: /switch/nextendo.nro\n");
-        if (result == UPDATE_OK) printf("Version registrada: %s\n", info.latest_tag);
-    } else {
-        printf("ERROR\n\n%s\n", updater_result_string(result));
+    if (!install) {
+        ui_exit();
+        return 0;
     }
 
-    wait_for_exit(&pad);
-    consoleExit(NULL);
+    ui_draw_download_begin(info.latest_tag, info.remote_size);
+    DownloadUiContext progress_ctx = { &pad, info.latest_tag, info.remote_size };
+    UpdateResult result = updater_install(&info, download_progress, &progress_ctx);
+
+    ui_draw_result(result, info.latest_tag);
+    wait_exit(&pad);
+    ui_exit();
     return 0;
 }

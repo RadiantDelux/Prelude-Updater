@@ -30,11 +30,16 @@ typedef enum {
     UPDATE_ERR_SD,
     UPDATE_ERR_BACKUP,
     UPDATE_ERR_INSTALL,
-    UPDATE_ERR_STATE
+    UPDATE_ERR_STATE,
+    UPDATE_ERR_CANCELLED
 } UpdateResult;
 
+typedef bool (*UpdaterProgressCallback)(long downloaded, long total, void *user);
+
 UpdateInfo updater_check(void);
-UpdateResult updater_install(const UpdateInfo *info);
+UpdateResult updater_install(const UpdateInfo *info,
+                             UpdaterProgressCallback progress_cb,
+                             void *progress_user);
 const char *updater_result_string(UpdateResult result);
 
 #endif
