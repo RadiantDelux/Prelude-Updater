@@ -1,0 +1,36 @@
+name: Build Prelude Updater
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: make -j$(nproc)
+
+      - name: Upload NRO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prelude-updater-${{ github.ref_name }}
+          path: prelude-updater.nro
+          if-no-files-found: error
+
+      - name: Upload NRO to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: prelude-updater.nro
+          generate_release_notes: true

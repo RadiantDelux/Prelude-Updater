@@ -1,0 +1,8 @@
+Prelude Updater
+
+Includes network transport code derived from Prelude-Nro:
+https://github.com/NextendoNetwork/Prelude-Nro
+Copyright (C) 2026 Nextendo Network
+Licensed under GNU Affero General Public License v3 or later.
+
+Modifications and updater-specific code: 2026 Prelude Updater contributors.

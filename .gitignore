@@ -1,0 +1,6 @@
+build/
+prelude-updater.nro
+prelude-updater.nacp
+prelude-updater.elf
+prelude-updater.map
+.DS_Store
