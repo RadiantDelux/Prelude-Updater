@@ -1,55 +1,52 @@
 # Prelude Updater
 
-Actualizador grafico para Nintendo Switch creado por **RadiantDelux**. Comprueba la ultima release
-publica de [`NextendoNetwork/Prelude-Nro`](https://github.com/NextendoNetwork/Prelude-Nro) e instala
-su asset `nextendo.nro` en:
+A standalone Nintendo Switch homebrew application that checks the latest public release of
+[`NextendoNetwork/Prelude-Nro`](https://github.com/NextendoNetwork/Prelude-Nro) and installs its
+`nextendo.nro` asset to:
 
 ```text
 sdmc:/switch/nextendo.nro
 ```
 
-## Novedades de v1.1.0
+## Features
 
-- Interfaz grafica 1280x720 con SDL2.
-- Usa la fuente compartida del sistema de Nintendo Switch; no incluye fuentes externas.
-- Barra de progreso real, porcentaje, MiB descargados y velocidad aproximada.
-- `B` permite cancelar durante la descarga.
-- Transporte cambiado a `switch-curl` para redirects, TLS y streaming mas eficientes.
-- Buffer de red de 256 KiB y escritura de SD bufferizada.
-- Instalacion rapida mediante `rename()` dentro de la SD; copia completa solo como fallback.
-- Icono propio para hbmenu.
-- Metadatos NACP: `Prelude Updater`, autor `RadiantDelux`, version `1.1.0`.
+- Graphical SDL2 interface with the Prelude Updater logo.
+- NRO metadata for hbmenu: **Prelude Updater**, **RadiantDelux**, version **1.2.0**.
+- GitHub Releases update checks over HTTPS.
+- Download progress, percentage, transferred size and current speed.
+- Safe temporary download and size validation before replacing Prelude.
+- Fast rename-based installation on the SD card, with copy fallback for FAT filesystems.
+- Temporary backup and recovery path if installation fails.
+- `B` can cancel an active download.
 
-## Funcionamiento
+## How it works
 
-1. Consulta `releases/latest` de GitHub por HTTPS.
-2. Lee el tag semver (`vX.Y.Z`) y el tamano publicado de `nextendo.nro`.
-3. Compara el tag con `sdmc:/switch/Prelude-Updater/installed_version.txt`.
-4. Descarga a `sdmc:/switch/Prelude-Updater/nextendo.nro.new`.
-5. libcurl sigue los redirects HTTPS de GitHub hasta el CDN.
-6. Verifica que el tamano descargado coincide con GitHub Releases.
-7. Mueve temporalmente el Prelude anterior a un backup; si FAT no permite `rename()`, usa copia.
-8. Mueve el NRO nuevo a `/switch/nextendo.nro`; tambien tiene fallback por copia.
-9. Vuelve a verificar el tamano y guarda el tag instalado.
+1. Queries GitHub `releases/latest` over HTTPS.
+2. Reads the semver tag (`vX.Y.Z`) and the published size of `nextendo.nro`.
+3. Compares the tag against `sdmc:/switch/Prelude-Updater/installed_version.txt`.
+4. Downloads to `sdmc:/switch/Prelude-Updater/nextendo.nro.new`.
+5. Follows GitHub HTTPS redirects to the release asset CDN.
+6. Verifies that the downloaded size matches the GitHub release metadata.
+7. Creates a temporary backup of the installed Prelude NRO when one exists.
+8. Replaces `/switch/nextendo.nro` and validates the final file size.
+9. Stores the installed tag for future update checks.
 
-La primera vez, si ya existe `nextendo.nro` pero no hay archivo de estado, la version local se
-muestra como `desconocida` y se ofrece instalar la release actual. A partir de la primera
-instalacion hecha por este updater, la comparacion de versiones es automatica.
+On the first run, if `nextendo.nro` already exists but no updater state file is present, the local
+version is shown as `unknown` and the current release is offered for installation. After the first
+installation performed by this updater, semver comparisons are automatic.
 
-## Controles
+## Controls
 
-- `A`: instalar una actualizacion disponible.
-- `B`: cancelar / cancelar la descarga.
-- `X`: reinstalar la release actual cuando ya esta actualizado.
-- `+`: salir.
+- `A`: install an available update.
+- `B`: cancel / cancel an active download.
+- `X`: reinstall the latest release when already up to date.
+- `+`: exit.
 
-## Dependencias
+## Build requirements
 
-Requiere devkitPro con:
+Requires devkitPro with devkitA64/libnx and these Switch portlibs:
 
 ```text
-devkitA64
-libnx
 switch-curl
 switch-sdl2
 switch-sdl2_ttf
@@ -58,55 +55,59 @@ switch-harfbuzz
 switch-zlib
 ```
 
-GitHub Actions instala automaticamente estas dependencias.
-
-## Compilar
+Build with:
 
 ```sh
 make -j$(nproc)
 ```
 
-Salida:
+Output:
 
 ```text
 prelude-updater.nro
 ```
 
-## Instalar en la SD
+The included GitHub Actions workflow installs the required packages and builds the NRO inside the
+`devkitpro/devkita64` container.
+
+## SD card layout
+
+Recommended layout:
 
 ```text
 /switch/Prelude-Updater/prelude-updater.nro
 /switch/nextendo.nro
 ```
 
-El directorio de datos `/switch/Prelude-Updater/` se crea automaticamente.
+The updater data directory is created automatically when needed.
 
-## Metadatos del NRO
+## NRO metadata
+
+The Makefile generates a NACP with:
 
 ```text
-Titulo:   Prelude Updater
-Autor:    RadiantDelux
-Version:  1.1.0
-Icono:    icon.jpg
+Name:    Prelude Updater
+Author:  RadiantDelux
+Version: 1.2.0
 ```
 
-## Seguridad e integridad
+The NACP and `icon.jpg` are explicitly embedded in `prelude-updater.nro`. The GitHub Actions build
+also checks that the generated NACP and final NRO contain the expected name and author strings.
 
-- Solo usa HTTPS.
-- Mantiene activa la verificacion TLS de libcurl/libnx.
-- Sigue como maximo 5 redirects.
-- Descarga a un archivo temporal antes de tocar Prelude.
-- Comprueba el tamano contra el asset publicado por GitHub.
-- Conserva un backup recuperable durante la sustitucion.
-- Si una operacion `rename()` falla en FAT, usa copia como fallback.
+## Security and integrity
 
-## Licencia y atribucion
+- Only HTTPS URLs are accepted.
+- TLS certificate verification remains enabled in libcurl.
+- Redirects are limited.
+- Prelude is not replaced until the download has completed and passed size validation.
+- A temporary backup is kept during replacement.
+- The downloaded and installed file sizes are checked against GitHub Releases metadata.
 
-AGPL-3.0-or-later.
+## License and attribution
 
-El updater ya no reutiliza el cliente HTTPS de Prelude: v1.1.0 usa `switch-curl`. Se mantiene la
-licencia AGPL del proyecto y la atribucion correspondiente a Prelude/Nextendo donde aplica.
+This project is licensed under AGPL-3.0-or-later because part of its update/transport design is based
+on the public Prelude-Nro project, which uses that license.
 
 Prelude-Nro: Copyright (C) 2026 Nextendo Network.
 
-Este proyecto no esta afiliado con Nintendo ni con Nextendo Network.
+This project is not affiliated with Nintendo or Nextendo Network.

@@ -131,7 +131,7 @@ static CURL *create_easy(const char *url) {
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 20L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Prelude-Updater/1.1.0");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Prelude-Updater/1.2.0");
     curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
     curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, CURL_BUFFER_SIZE);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
@@ -270,16 +270,16 @@ long net_https_download_url(const char *url, FILE *out,
 
 const char *net_error_string(int error) {
     switch (error) {
-        case NET_OK: return "sin error";
-        case NET_ERR_DNS: return "fallo DNS";
-        case NET_ERR_CONNECT: return "fallo de conexion o timeout";
-        case NET_ERR_SSL: return "fallo TLS/SSL";
-        case NET_ERR_HTTP: return "respuesta HTTP invalida";
-        case NET_ERR_OOM: return "memoria insuficiente";
-        case NET_ERR_WRITE: return "error escribiendo en la SD";
-        case NET_ERR_REDIRECT: return "demasiados redirects HTTPS";
-        case NET_ERR_URL: return "URL invalida";
-        case NET_ERR_ABORTED: return "descarga cancelada";
-        default: return "error de red desconocido";
+        case NET_OK: return "no error";
+        case NET_ERR_DNS: return "DNS failure";
+        case NET_ERR_CONNECT: return "connection failure or timeout";
+        case NET_ERR_SSL: return "TLS/SSL failure";
+        case NET_ERR_HTTP: return "invalid HTTP response";
+        case NET_ERR_OOM: return "out of memory";
+        case NET_ERR_WRITE: return "SD write error";
+        case NET_ERR_REDIRECT: return "too many HTTPS redirects";
+        case NET_ERR_URL: return "invalid URL";
+        case NET_ERR_ABORTED: return "download cancelled";
+        default: return "unknown network error";
     }
 }

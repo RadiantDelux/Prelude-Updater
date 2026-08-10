@@ -49,10 +49,11 @@ static bool download_progress(long downloaded, long total, void *user) {
 
 static int console_fallback(PadState *pad) {
     consoleInit(NULL);
-    printf("Prelude Updater\n\n");
-    printf("No se pudo iniciar la interfaz grafica.\n");
-    printf("Comprueba que el NRO fue compilado con SDL2/SDL2_ttf.\n\n");
-    printf("Pulsa + para salir.\n");
+    printf("Prelude Updater\n");
+    printf("by RadiantDelux\n\n");
+    printf("The graphical interface could not be started.\n");
+    printf("Make sure the NRO was built with SDL2 and SDL2_ttf.\n\n");
+    printf("Press + to exit.\n");
     consoleUpdate(NULL);
     while (appletMainLoop()) {
         padUpdate(pad);
@@ -78,7 +79,7 @@ int main(int argc, char **argv) {
     UpdateInfo info = updater_check();
 
     if (!info.ok) {
-        ui_draw_error(info.error[0] ? info.error : "No se pudo consultar GitHub.", info.http_status);
+        ui_draw_error(info.error[0] ? info.error : "Could not query GitHub.", info.http_status);
         wait_exit(&pad);
         ui_exit();
         return 0;

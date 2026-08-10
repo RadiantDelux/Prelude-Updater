@@ -185,7 +185,7 @@ static bool copy_file(const char *src_path, const char *dst_path) {
 UpdateInfo updater_check(void) {
     UpdateInfo info;
     memset(&info, 0, sizeof(info));
-    strcpy(info.installed_tag, "desconocida");
+    strcpy(info.installed_tag, "unknown");
 
     info.target_exists = file_size(PRELUDE_TARGET_PATH, &info.local_size);
     info.installed_version_known = read_state(info.installed_tag, sizeof(info.installed_tag));
@@ -198,18 +198,18 @@ UpdateInfo updater_check(void) {
     info.net_error = net_error;
 
     if (!body) {
-        snprintf(info.error, sizeof(info.error), "No se pudo consultar GitHub: %s", net_error_string(net_error));
+        snprintf(info.error, sizeof(info.error), "Could not query GitHub: %s", net_error_string(net_error));
         return info;
     }
     if (status != 200) {
-        snprintf(info.error, sizeof(info.error), "GitHub respondio HTTP %d", status);
+        snprintf(info.error, sizeof(info.error), "GitHub returned HTTP %d", status);
         free(body);
         return info;
     }
 
     long remote_size = 0;
     if (!parse_release_json((const char *)body, info.latest_tag, sizeof(info.latest_tag), &remote_size)) {
-        snprintf(info.error, sizeof(info.error), "No se pudo interpretar la release o falta nextendo.nro");
+        snprintf(info.error, sizeof(info.error), "Could not parse the release or nextendo.nro is missing");
         free(body);
         return info;
     }
@@ -218,7 +218,7 @@ UpdateInfo updater_check(void) {
     info.remote_size = remote_size;
     int n = snprintf(info.download_url, sizeof(info.download_url), RELEASE_URL_FMT, info.latest_tag);
     if (n <= 0 || (size_t)n >= sizeof(info.download_url)) {
-        snprintf(info.error, sizeof(info.error), "URL de descarga demasiado larga");
+        snprintf(info.error, sizeof(info.error), "Download URL is too long");
         return info;
     }
 
@@ -367,15 +367,15 @@ UpdateResult updater_install(const UpdateInfo *info,
 
 const char *updater_result_string(UpdateResult result) {
     switch (result) {
-        case UPDATE_OK: return "Actualizacion instalada correctamente.";
-        case UPDATE_ERR_NETWORK: return "Fallo de red durante la descarga.";
-        case UPDATE_ERR_HTTP: return "GitHub devolvio una respuesta inesperada.";
-        case UPDATE_ERR_SIZE: return "La descarga esta incompleta o no coincide con el asset publicado.";
-        case UPDATE_ERR_SD: return "No se pudo escribir en la tarjeta SD.";
-        case UPDATE_ERR_BACKUP: return "No se pudo crear una copia de seguridad del Prelude actual.";
-        case UPDATE_ERR_INSTALL: return "No se pudo sustituir nextendo.nro; se intento restaurar la copia anterior.";
-        case UPDATE_ERR_STATE: return "Prelude se actualizo, pero no se pudo guardar la version instalada.";
-        case UPDATE_ERR_CANCELLED: return "Descarga cancelada.";
-        default: return "Error desconocido.";
+        case UPDATE_OK: return "Update installed successfully.";
+        case UPDATE_ERR_NETWORK: return "Network failure during the download.";
+        case UPDATE_ERR_HTTP: return "GitHub returned an unexpected response.";
+        case UPDATE_ERR_SIZE: return "The download is incomplete or does not match the published asset.";
+        case UPDATE_ERR_SD: return "Could not write to the SD card.";
+        case UPDATE_ERR_BACKUP: return "Could not create a backup of the currently installed Prelude.";
+        case UPDATE_ERR_INSTALL: return "Could not replace nextendo.nro; recovery of the previous copy was attempted.";
+        case UPDATE_ERR_STATE: return "Prelude was updated, but the installed version state could not be saved.";
+        case UPDATE_ERR_CANCELLED: return "Download cancelled.";
+        default: return "Unknown error.";
     }
 }

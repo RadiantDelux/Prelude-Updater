@@ -14,11 +14,13 @@ TARGET   := prelude-updater
 BUILD    := build
 SOURCES  := source
 INCLUDES := source
+ROMFS    := romfs
 
+# NRO metadata shown by hbmenu.
 APP_TITLE   := Prelude Updater
 APP_AUTHOR  := RadiantDelux
-APP_VERSION := 1.1.0
-APP_ICON    := icon.jpg
+APP_VERSION := 1.2.0
+APP_ICON    := $(TOPDIR)/icon.jpg
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 PKGCONF := PKG_CONFIG_PATH=$(PORTLIBS)/lib/pkgconfig pkg-config
@@ -57,7 +59,13 @@ export INCLUDE := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
                   -I$(CURDIR)/$(BUILD)
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
-export NROFLAGS += --icon=$(CURDIR)/$(APP_ICON)
+# The NACP must be explicitly embedded in the NRO; otherwise hbmenu cannot show
+# APP_TITLE / APP_AUTHOR / APP_VERSION even if the .nacp file was generated.
+export NROFLAGS += --icon=$(APP_ICON)
+export NROFLAGS += --nacp=$(CURDIR)/$(TARGET).nacp
+ifneq ($(strip $(ROMFS)),)
+export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
+endif
 
 .PHONY: $(BUILD) clean all
 
