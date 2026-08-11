@@ -7,7 +7,11 @@
 #include <switch.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
+#include "audio.h"
+#include "releases.h"
+#include "settings.h"
 #include "ui.h"
 #include "updater.h"
 
@@ -15,45 +19,243 @@
 
 typedef struct {
     PadState *pad;
-    const char *tag;
-    long expected_total;
-} DownloadUiContext;
+    const char *eyebrow;
+    const char *title;
+} ProgressUi;
 
 static void sleep_frame(void) {
     svcSleepThread(FRAME_NS);
 }
 
-static bool wait_for_exit(PadState *pad) {
-    while (appletMainLoop()) {
-        ui_pump();
-        padUpdate(pad);
+static u64 buttons_down(PadState *pad) {
+    ui_pump();
+    padUpdate(pad);
+    return padGetButtonsDown(pad);
+}
 
-        if (padGetButtonsDown(pad) & HidNpadButton_Plus) return true;
+static int wrap_index(int value, int count) {
+    if (count <= 0) return 0;
+    if (value < 0) return count - 1;
+    if (value >= count) return 0;
+    return value;
+}
+
+static bool wait_back_or_exit(PadState *pad) {
+    while (appletMainLoop()) {
+        u64 down = buttons_down(pad);
+        if (down & HidNpadButton_Plus) return false;
+        if (down & (HidNpadButton_B | HidNpadButton_A)) return true;
         sleep_frame();
     }
     return false;
 }
 
-static bool on_download_progress(long downloaded, long total, void *user) {
-    DownloadUiContext *ctx = user;
-    if (!ctx || !ctx->pad) return true;
+static bool confirm_action(PadState *pad, const char *title, const char *message) {
+    ui_draw_confirm(title, message);
+    while (appletMainLoop()) {
+        u64 down = buttons_down(pad);
+        if (down & HidNpadButton_A) return true;
+        if (down & HidNpadButton_B) return false;
+        if (down & HidNpadButton_Plus) return false;
+        sleep_frame();
+    }
+    return false;
+}
 
-    ui_pump();
-    padUpdate(ctx->pad);
+static bool progress_callback(long downloaded, long total, void *user) {
+    ProgressUi *progress = user;
+    if (!progress || !progress->pad) return false;
 
+    u64 down = buttons_down(progress->pad);
+    if (down & HidNpadButton_B) return false;
     if (!appletMainLoop()) return false;
-    if (padGetButtonsDown(ctx->pad) & HidNpadButton_B) return false;
 
-    long effective_total = total > 0 ? total : ctx->expected_total;
-    ui_draw_download_progress(ctx->tag, downloaded, effective_total, false);
+    ui_draw_progress(progress->eyebrow, progress->title,
+                     downloaded, total, true, false);
     return true;
 }
 
-static int run_console_fallback(PadState *pad) {
+static const char *current_audio_file(const AppSettings *settings, AudioSlot slot) {
+    if (slot == AUDIO_SLOT_BACKGROUND) return settings->background;
+    if (slot == AUDIO_SLOT_START) return settings->start_sound;
+    return settings->finish_sound;
+}
+
+static size_t filter_tracks(const AudioCatalog *catalog,
+                            AudioSlot slot,
+                            const AudioTrack **out,
+                            size_t cap) {
+    size_t count = 0;
+    if (!catalog) return 0;
+
+    for (size_t i = 0; i < catalog->count && count < cap; ++i) {
+        if (audio_track_supports(&catalog->tracks[i], slot)) {
+            out[count++] = &catalog->tracks[i];
+        }
+    }
+    return count;
+}
+
+static bool choose_audio_track(PadState *pad,
+                               AppSettings *settings,
+                               AudioCatalog *catalog,
+                               AudioSlot slot) {
+    const AudioTrack *tracks[AUDIO_TRACK_LIMIT];
+    size_t count = filter_tracks(catalog, slot, tracks, AUDIO_TRACK_LIMIT);
+    int selected = 0;
+
+    const char *current = current_audio_file(settings, slot);
+    for (size_t i = 0; i < count; ++i) {
+        if (current[0] && strcmp(current, tracks[i]->local_name) == 0) {
+            selected = (int)i + 1;
+            break;
+        }
+    }
+
+    while (appletMainLoop()) {
+        ui_draw_track_list(slot, tracks, count, selected, current_audio_file(settings, slot));
+        u64 down = buttons_down(pad);
+
+        if (down & HidNpadButton_Plus) return false;
+        if (down & HidNpadButton_B) return true;
+        if (down & HidNpadButton_Up) selected = wrap_index(selected - 1, (int)count + 1);
+        if (down & HidNpadButton_Down) selected = wrap_index(selected + 1, (int)count + 1);
+
+        if (down & HidNpadButton_A) {
+            if (selected == 0) {
+                audio_clear_slot(settings, slot);
+                audio_apply_settings(settings);
+                continue;
+            }
+
+            const AudioTrack *track = tracks[selected - 1];
+            ProgressUi progress = { pad, "Downloading audio", track->title };
+            ui_draw_progress(progress.eyebrow, progress.title, 0, 0, true, true);
+
+            char error[160];
+            if (!audio_install_track(track, progress_callback, &progress, error, sizeof(error))) {
+                ui_draw_notice("Audio download failed", error, true);
+                if (!wait_back_or_exit(pad)) return false;
+                continue;
+            }
+
+            if (!audio_select_track(settings, slot, track)) {
+                ui_draw_notice("Settings error", "The track was downloaded, but the selection could not be saved.", true);
+                if (!wait_back_or_exit(pad)) return false;
+                continue;
+            }
+
+            audio_apply_settings(settings);
+            if (slot == AUDIO_SLOT_START) audio_play_start();
+            if (slot == AUDIO_SLOT_FINISH) audio_play_finish();
+        }
+
+        sleep_frame();
+    }
+    return false;
+}
+
+static bool music_menu(PadState *pad, AppSettings *settings) {
+    int selected = 0;
+    AudioCatalog catalog;
+    memset(&catalog, 0, sizeof(catalog));
+
+    ui_draw_checking("Music & sounds", "Loading catalog from GitHub...");
+    catalog = audio_catalog_fetch();
+
+    while (appletMainLoop()) {
+        ui_draw_music_menu(settings, selected);
+        u64 down = buttons_down(pad);
+
+        if (down & HidNpadButton_Plus) return false;
+        if (down & HidNpadButton_B) return true;
+        if (down & HidNpadButton_Up) selected = wrap_index(selected - 1, 5);
+        if (down & HidNpadButton_Down) selected = wrap_index(selected + 1, 5);
+
+        if (down & HidNpadButton_A) {
+            if (selected == 4) return true;
+            if (selected == 3) {
+                ui_draw_checking("Music & sounds", "Refreshing catalog from GitHub...");
+                catalog = audio_catalog_fetch();
+                continue;
+            }
+
+            if (!catalog.ok) {
+                ui_draw_notice("Music catalog unavailable", catalog.error, true);
+                if (!wait_back_or_exit(pad)) return false;
+                continue;
+            }
+
+            AudioSlot slot = (AudioSlot)selected;
+            if (!choose_audio_track(pad, settings, &catalog, slot)) return false;
+        }
+        sleep_frame();
+    }
+    return false;
+}
+
+static bool release_menu(PadState *pad,
+                         ReleaseTarget target,
+                         const char *self_path) {
+    ui_draw_checking(releases_target_name(target), "Loading release history from GitHub...");
+    ReleaseList releases = releases_fetch(target);
+    if (!releases.ok) {
+        ui_draw_notice("Could not load releases", releases.error, true);
+        return wait_back_or_exit(pad);
+    }
+
+    char current_tag[32];
+    bool target_exists = false;
+    updater_current_version(target, current_tag, sizeof(current_tag), &target_exists, self_path);
+
+    int selected = 0;
+    while (appletMainLoop()) {
+        ui_draw_release_list(target, &releases, selected, current_tag, target_exists);
+        u64 down = buttons_down(pad);
+
+        if (down & HidNpadButton_Plus) return false;
+        if (down & HidNpadButton_B) return true;
+        if (down & HidNpadButton_Up) selected = wrap_index(selected - 1, (int)releases.count);
+        if (down & HidNpadButton_Down) selected = wrap_index(selected + 1, (int)releases.count);
+
+        if (down & HidNpadButton_A) {
+            const ReleaseEntry *release = &releases.entries[selected];
+            const char *action = updater_action_for(release, current_tag, target_exists);
+
+            char message[256];
+            snprintf(message, sizeof(message), "%s %s to %s?",
+                     action, releases_target_name(target), release->tag);
+            if (!confirm_action(pad, action, message)) continue;
+
+            audio_play_start();
+            ProgressUi progress = { pad, action, release->tag };
+            ui_draw_progress(action, release->tag, 0, release->size, true, true);
+            UpdateResult result = updater_install_release(target,
+                                                          release,
+                                                          self_path,
+                                                          progress_callback,
+                                                          &progress);
+            if (result == UPDATE_OK || result == UPDATE_ERR_STATE) audio_play_finish();
+            ui_draw_operation_result(target, release, action, result);
+
+            if (!wait_back_or_exit(pad)) return false;
+            if (target == RELEASE_TARGET_UPDATER &&
+                (result == UPDATE_OK || result == UPDATE_ERR_STATE)) {
+                return false;
+            }
+
+            updater_current_version(target, current_tag, sizeof(current_tag),
+                                    &target_exists, self_path);
+        }
+        sleep_frame();
+    }
+    return false;
+}
+
+static int console_fallback(PadState *pad) {
     consoleInit(NULL);
-    printf("Prelude Updater\n");
-    printf("by RadiantDelux\n\n");
-    printf("Unable to start the graphical interface.\n\n");
+    printf("Prelude Updater\nby RadiantDelux\n\n");
+    printf("The graphical interface could not be started.\n");
     printf("Press + to exit.\n");
     consoleUpdate(NULL);
 
@@ -63,67 +265,54 @@ static int run_console_fallback(PadState *pad) {
         consoleUpdate(NULL);
         sleep_frame();
     }
-
     consoleExit(NULL);
     return 0;
 }
 
-static bool wait_for_action(PadState *pad, const UpdateInfo *info) {
-    while (appletMainLoop()) {
-        ui_pump();
-        padUpdate(pad);
-
-        u64 down = padGetButtonsDown(pad);
-        if (down & HidNpadButton_Plus) return false;
-        if (info->update_available && (down & HidNpadButton_B)) return false;
-        if (info->update_available && (down & HidNpadButton_A)) return true;
-        if (!info->update_available && (down & HidNpadButton_X)) return true;
-
-        sleep_frame();
-    }
-
-    return false;
-}
-
 int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
-
     PadState pad;
     padInitializeDefault(&pad);
 
-    if (!ui_init()) return run_console_fallback(&pad);
+    if (!ui_init()) return console_fallback(&pad);
 
-    ui_draw_checking();
-    UpdateInfo info = updater_check();
+    AppSettings settings;
+    settings_prepare_dirs();
+    settings_load(&settings);
+    audio_init(&settings);
 
-    if (!info.ok) {
-        ui_draw_error(info.error[0] ? info.error : "Could not query GitHub.", info.http_status);
-        wait_for_exit(&pad);
-        ui_exit();
-        return 0;
+    const char *self_path = (argc > 0 && argv && argv[0]) ? argv[0] : SELF_TARGET_FALLBACK;
+    int selected = 0;
+    bool running = true;
+
+    while (running && appletMainLoop()) {
+        ui_draw_main_menu(selected);
+        u64 down = buttons_down(&pad);
+
+        if (down & HidNpadButton_Plus) break;
+        if (down & HidNpadButton_Up) selected = wrap_index(selected - 1, 4);
+        if (down & HidNpadButton_Down) selected = wrap_index(selected + 1, 4);
+
+        if (down & HidNpadButton_A) {
+            switch (selected) {
+                case 0:
+                    running = release_menu(&pad, RELEASE_TARGET_PRELUDE, self_path);
+                    break;
+                case 1:
+                    running = release_menu(&pad, RELEASE_TARGET_UPDATER, self_path);
+                    break;
+                case 2:
+                    running = music_menu(&pad, &settings);
+                    break;
+                case 3:
+                    running = false;
+                    break;
+            }
+        }
+        sleep_frame();
     }
 
-    ui_draw_info(&info);
-    if (!wait_for_action(&pad, &info)) {
-        ui_exit();
-        return 0;
-    }
-
-    ui_draw_download_begin(info.latest_tag, info.remote_size);
-
-    DownloadUiContext progress = {
-        .pad = &pad,
-        .tag = info.latest_tag,
-        .expected_total = info.remote_size,
-    };
-
-    UpdateResult result = updater_install(&info, on_download_progress, &progress);
-    ui_draw_result(result, info.latest_tag);
-    wait_for_exit(&pad);
-
+    audio_exit();
     ui_exit();
     return 0;
 }

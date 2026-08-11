@@ -18,17 +18,11 @@
 
 typedef int (*NetProgressCallback)(long downloaded, long total, void *user);
 
-/*
- * HTTPS helpers backed by devkitPro switch-curl.
- * libcurl handles redirects, buffering, TLS verification and streaming.
- */
 unsigned char *net_https_get_url(const char *url, size_t *out_len,
                                  int *out_status, int *out_error);
-
 long net_https_download_url(const char *url, FILE *out,
                             int *out_status, int *out_error,
                             NetProgressCallback progress_cb, void *progress_user);
-
 const char *net_error_string(int error);
 
 #endif

@@ -1,0 +1,13 @@
+# Prelude Updater remote audio catalog
+#
+# Format:
+# id|roles|title|artist|https-url
+#
+# roles can be: background, start, finish, all
+# Multiple roles can be comma-separated.
+# Supported file extensions: .ogg, .mp3, .wav
+#
+# Example after you upload your audio files to this repository:
+# menu-night|background|Night Menu|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/menu-night.ogg
+# update-start|start|Update Start|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/update-start.ogg
+# update-done|finish|Update Complete|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/update-done.ogg
