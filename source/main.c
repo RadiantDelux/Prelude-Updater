@@ -229,17 +229,17 @@ static bool release_menu(PadState *pad,
                                                           self_path,
                                                           progress_callback,
                                                           &progress);
-            if (result == UPDATE_OK || result == UPDATE_ERR_STATE) {
-                audio_play_finish();
-            }
-            ui_draw_operation_result(target, release, action, result);
 
-            if (!wait_back_or_exit(pad)) return false;
-            if (target == RELEASE_TARGET_UPDATER &&
-                (result == UPDATE_OK || result == UPDATE_ERR_STATE)) {
+            if (result == UPDATE_SELF_RESTART) {
+                ui_draw_notice("Updater downloaded", "Restarting through hbloader to finish the self-update safely.", false);
+                svcSleepThread(600000000L);
                 return false;
             }
 
+            if (result == UPDATE_OK || result == UPDATE_ERR_STATE) audio_play_finish();
+            ui_draw_operation_result(target, release, action, result);
+
+            if (!wait_back_or_exit(pad)) return false;
             updater_current_version(target, current_tag, sizeof(current_tag),
                                     &target_exists, self_path);
         }
@@ -265,10 +265,37 @@ static int console_fallback(PadState *pad) {
     return 0;
 }
 
+static int self_update_failure_console(PadState *pad) {
+    consoleInit(NULL);
+    printf("Prelude Updater\nby RadiantDelux\n\n");
+    printf("The staged self-update could not be completed.\n");
+    printf("The original updater was preserved when possible.\n\n");
+    printf("Press + to return to hbmenu.\n");
+    consoleUpdate(NULL);
+
+    while (appletMainLoop()) {
+        padUpdate(pad);
+        if (padGetButtonsDown(pad) & HidNpadButton_Plus) break;
+        consoleUpdate(NULL);
+        sleep_frame();
+    }
+    consoleExit(NULL);
+    return 1;
+}
+
 int main(int argc, char **argv) {
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     PadState pad;
     padInitializeDefault(&pad);
+
+    const char *self_path = (argc > 0 && argv && argv[0]) ? argv[0] : SELF_TARGET_FALLBACK;
+
+    if (strcmp(self_path, SELF_STAGE_PATH) == 0) {
+        if (updater_finish_self_update(self_path)) return 0;
+        return self_update_failure_console(&pad);
+    }
+
+    updater_cleanup_self_update();
 
     if (!ui_init()) return console_fallback(&pad);
 
@@ -277,7 +304,6 @@ int main(int argc, char **argv) {
     settings_load(&settings);
     audio_init(&settings);
 
-    const char *self_path = (argc > 0 && argv && argv[0]) ? argv[0] : SELF_TARGET_FALLBACK;
     int selected = 0;
     bool running = true;
 
