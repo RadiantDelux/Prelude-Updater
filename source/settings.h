@@ -9,7 +9,6 @@
 
 typedef struct {
     char background[96];
-    char start_sound[96];
     char finish_sound[96];
 } AppSettings;
 
