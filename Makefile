@@ -18,7 +18,7 @@ ROMFS    := romfs
 
 APP_TITLE   := Prelude Updater
 APP_AUTHOR  := RadiantDelux
-APP_VERSION := 1.4.0
+APP_VERSION := 1.3.0
 APP_ICON    := $(TOPDIR)/icon.jpg
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
