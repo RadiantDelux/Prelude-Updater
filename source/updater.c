@@ -137,11 +137,150 @@ static const char *target_path_for(ReleaseTarget target, const char *self_path) 
     return SELF_TARGET_FALLBACK;
 }
 
-static void transaction_paths(ReleaseTarget target, char *temp, size_t temp_cap,
+static void transaction_paths(char *temp, size_t temp_cap,
                               char *backup, size_t backup_cap) {
-    const char *base = target == RELEASE_TARGET_PRELUDE ? "nextendo" : "prelude-updater";
-    snprintf(temp, temp_cap, "%s/%s.nro.new", UPDATER_DATA_DIR, base);
-    snprintf(backup, backup_cap, "%s/%s.nro.bak", UPDATER_DATA_DIR, base);
+    snprintf(temp, temp_cap, "%s/nextendo.nro.new", UPDATER_DATA_DIR);
+    snprintf(backup, backup_cap, "%s/nextendo.nro.bak", UPDATER_DATA_DIR);
+}
+
+static bool write_self_pending(const char *target_path, long expected_size) {
+    FILE *file = fopen(SELF_PENDING_PATH, "wb");
+    if (!file) return false;
+
+    bool ok = fprintf(file, "%s\n%ld\n", target_path, expected_size) >= 0 && fflush(file) == 0;
+    fclose(file);
+    fsdevCommitDevice("sdmc");
+    return ok;
+}
+
+static bool read_self_pending(char *target_path, size_t target_cap, long *expected_size) {
+    FILE *file = fopen(SELF_PENDING_PATH, "rb");
+    if (!file) return false;
+
+    char size_line[48];
+    bool ok = fgets(target_path, (int)target_cap, file) != NULL &&
+              fgets(size_line, sizeof(size_line), file) != NULL;
+    fclose(file);
+    if (!ok) return false;
+
+    target_path[strcspn(target_path, "\r\n")] = '\0';
+    size_line[strcspn(size_line, "\r\n")] = '\0';
+    if (strncmp(target_path, "sdmc:/", 6) != 0 || target_path[0] == '\0') return false;
+
+    char *end = NULL;
+    long value = strtol(size_line, &end, 10);
+    if (!end || *end != '\0' || value < MIN_NRO_SIZE) return false;
+    if (expected_size) *expected_size = value;
+    return true;
+}
+
+static UpdateResult download_self_update(const ReleaseEntry *release,
+                                         const char *target_path,
+                                         UpdaterProgressCallback progress_cb,
+                                         void *progress_user) {
+    if (!envHasNextLoad()) return UPDATE_ERR_CHAINLOAD;
+
+    remove(SELF_STAGE_PATH);
+    remove(SELF_PENDING_PATH);
+
+    FILE *out = fopen(SELF_STAGE_PATH, "wb");
+    if (!out) return UPDATE_ERR_SD;
+    setvbuf(out, NULL, _IOFBF, COPY_BUFFER_SIZE);
+
+    ProgressBridge bridge = { progress_cb, progress_user, release->size };
+    int status = 0;
+    int net_error = NET_ERR_UNKNOWN;
+    long bytes = net_https_download_url(release->download_url,
+                                        out,
+                                        &status,
+                                        &net_error,
+                                        progress_cb ? progress_bridge : NULL,
+                                        progress_cb ? &bridge : NULL);
+    bool flushed = fflush(out) == 0;
+    fclose(out);
+    fsdevCommitDevice("sdmc");
+
+    if (bytes < 0 || net_error != NET_OK) {
+        remove(SELF_STAGE_PATH);
+        return net_error == NET_ERR_ABORTED ? UPDATE_ERR_CANCELLED :
+               net_error == NET_ERR_WRITE ? UPDATE_ERR_SD : UPDATE_ERR_NETWORK;
+    }
+    if (status != 200) {
+        remove(SELF_STAGE_PATH);
+        return UPDATE_ERR_HTTP;
+    }
+    if (!flushed || bytes != release->size || bytes < MIN_NRO_SIZE) {
+        remove(SELF_STAGE_PATH);
+        return UPDATE_ERR_SIZE;
+    }
+
+    long stage_size = 0;
+    if (!file_size(SELF_STAGE_PATH, &stage_size) || stage_size != release->size) {
+        remove(SELF_STAGE_PATH);
+        return UPDATE_ERR_SIZE;
+    }
+
+    if (!write_self_pending(target_path, release->size)) {
+        remove(SELF_STAGE_PATH);
+        return UPDATE_ERR_SD;
+    }
+
+    Result rc = envSetNextLoad(SELF_STAGE_PATH, SELF_STAGE_PATH);
+    if (R_FAILED(rc)) {
+        remove(SELF_PENDING_PATH);
+        remove(SELF_STAGE_PATH);
+        fsdevCommitDevice("sdmc");
+        return UPDATE_ERR_CHAINLOAD;
+    }
+
+    return UPDATE_SELF_RESTART;
+}
+
+bool updater_finish_self_update(const char *stage_path) {
+    if (!stage_path || strcmp(stage_path, SELF_STAGE_PATH) != 0) return false;
+    if (!envHasNextLoad()) return false;
+
+    char target_path[512];
+    long expected_size = 0;
+    if (!read_self_pending(target_path, sizeof(target_path), &expected_size)) return false;
+
+    long stage_size = 0;
+    if (!file_size(SELF_STAGE_PATH, &stage_size) || stage_size != expected_size) return false;
+
+    bool had_target = file_size(target_path, NULL);
+    if (had_target) {
+        remove(SELF_BACKUP_PATH);
+        if (!copy_file(target_path, SELF_BACKUP_PATH)) return false;
+    }
+
+    if (!copy_file(SELF_STAGE_PATH, target_path)) {
+        if (had_target) restore_backup(SELF_BACKUP_PATH, target_path);
+        return false;
+    }
+
+    long installed_size = 0;
+    if (!file_size(target_path, &installed_size) || installed_size != expected_size) {
+        if (had_target) restore_backup(SELF_BACKUP_PATH, target_path);
+        else remove(target_path);
+        fsdevCommitDevice("sdmc");
+        return false;
+    }
+
+    Result rc = envSetNextLoad(target_path, target_path);
+    if (R_FAILED(rc)) {
+        if (had_target) restore_backup(SELF_BACKUP_PATH, target_path);
+        return false;
+    }
+
+    fsdevCommitDevice("sdmc");
+    return true;
+}
+
+void updater_cleanup_self_update(void) {
+    remove(SELF_PENDING_PATH);
+    remove(SELF_STAGE_PATH);
+    remove(SELF_BACKUP_PATH);
+    fsdevCommitDevice("sdmc");
 }
 
 bool updater_current_version(ReleaseTarget target,
@@ -189,9 +328,13 @@ UpdateResult updater_install_release(ReleaseTarget target,
     if (!settings_prepare_dirs()) return UPDATE_ERR_SD;
 
     const char *target_path = target_path_for(target, self_path);
+    if (target == RELEASE_TARGET_UPDATER) {
+        return download_self_update(release, target_path, progress_cb, progress_user);
+    }
+
     char temp_path[256];
     char backup_path[256];
-    transaction_paths(target, temp_path, sizeof(temp_path), backup_path, sizeof(backup_path));
+    transaction_paths(temp_path, sizeof(temp_path), backup_path, sizeof(backup_path));
 
     remove(temp_path);
     FILE *out = fopen(temp_path, "wb");
@@ -262,7 +405,7 @@ UpdateResult updater_install_release(ReleaseTarget target,
         return UPDATE_ERR_INSTALL;
     }
 
-    if (target == RELEASE_TARGET_PRELUDE && !write_state(release->tag)) {
+    if (!write_state(release->tag)) {
         if (!install_moved) remove(temp_path);
         remove(backup_path);
         return UPDATE_ERR_STATE;
@@ -277,6 +420,7 @@ UpdateResult updater_install_release(ReleaseTarget target,
 const char *updater_result_string(UpdateResult result) {
     switch (result) {
         case UPDATE_OK: return "Installed successfully.";
+        case UPDATE_SELF_RESTART: return "The updater will restart to finish installing itself.";
         case UPDATE_ERR_NETWORK: return "Network failure during the download.";
         case UPDATE_ERR_HTTP: return "GitHub returned an unexpected response.";
         case UPDATE_ERR_SIZE: return "The downloaded file does not match the published asset.";
@@ -285,6 +429,7 @@ const char *updater_result_string(UpdateResult result) {
         case UPDATE_ERR_INSTALL: return "Could not replace the installed NRO; recovery was attempted.";
         case UPDATE_ERR_STATE: return "Installed, but the local version state could not be saved.";
         case UPDATE_ERR_CANCELLED: return "Download cancelled.";
+        case UPDATE_ERR_CHAINLOAD: return "The homebrew loader cannot restart the updater automatically.";
         default: return "Unknown error.";
     }
 }
