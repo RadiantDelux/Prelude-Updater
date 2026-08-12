@@ -52,3 +52,5 @@ If installation fails after the backup is created, recovery of the previous upda
 - Updater settings/music/cache: `/switch/Prelude-Updater/`
 
 Users running one of the withdrawn builds with the broken self-update should install this corrected v1.3.0 manually from the ZIP once. Future self-updates use the staged process described above.
+
+Release build validated by GitHub Actions before publication.
