@@ -21,7 +21,6 @@
 #define MIN_AUDIO_SIZE 128L
 
 static Mix_Music *background_music;
-static Mix_Chunk *start_sound;
 static Mix_Chunk *finish_sound;
 static bool mixer_ready;
 
@@ -74,11 +73,12 @@ static unsigned parse_roles(const char *text) {
     char *save = NULL;
     for (char *token = strtok_r(copy, ",", &save); token; token = strtok_r(NULL, ",", &save)) {
         while (*token == ' ' || *token == '\t') ++token;
-        if (strcmp(token, "background") == 0) roles |= AUDIO_ROLE_BACKGROUND;
-        else if (strcmp(token, "start") == 0) roles |= AUDIO_ROLE_START;
-        else if (strcmp(token, "finish") == 0) roles |= AUDIO_ROLE_FINISH;
-        else if (strcmp(token, "all") == 0) {
-            roles |= AUDIO_ROLE_BACKGROUND | AUDIO_ROLE_START | AUDIO_ROLE_FINISH;
+        if (strcmp(token, "background") == 0 || strcmp(token, "start") == 0) {
+            roles |= AUDIO_ROLE_BACKGROUND;
+        } else if (strcmp(token, "finish") == 0) {
+            roles |= AUDIO_ROLE_FINISH;
+        } else if (strcmp(token, "all") == 0) {
+            roles |= AUDIO_ROLE_BACKGROUND | AUDIO_ROLE_FINISH;
         }
     }
     return roles;
@@ -123,10 +123,8 @@ static bool parse_catalog_line(char *line, AudioTrack *track) {
 
 static void free_audio_objects(void) {
     if (background_music) Mix_FreeMusic(background_music);
-    if (start_sound) Mix_FreeChunk(start_sound);
     if (finish_sound) Mix_FreeChunk(finish_sound);
     background_music = NULL;
-    start_sound = NULL;
     finish_sound = NULL;
 }
 
@@ -181,18 +179,17 @@ void audio_apply_settings(const AppSettings *settings) {
     free_audio_objects();
 
     background_music = load_music_file(settings->background);
-    start_sound = load_sound_file(settings->start_sound);
     finish_sound = load_sound_file(settings->finish_sound);
 
     if (background_music) Mix_PlayMusic(background_music, -1);
 }
 
-void audio_play_start(void) {
-    if (mixer_ready && start_sound) Mix_PlayChannel(-1, start_sound, 0);
-}
-
 void audio_play_finish(void) {
-    if (mixer_ready && finish_sound) Mix_PlayChannel(-1, finish_sound, 0);
+    if (!mixer_ready || !finish_sound) return;
+
+    Mix_HaltMusic();
+    Mix_HaltChannel(-1);
+    Mix_PlayChannel(-1, finish_sound, 0);
 }
 
 AudioCatalog audio_catalog_fetch(void) {
@@ -246,9 +243,7 @@ AudioCatalog audio_catalog_fetch(void) {
 
 bool audio_track_supports(const AudioTrack *track, AudioSlot slot) {
     if (!track) return false;
-    unsigned role = AUDIO_ROLE_BACKGROUND;
-    if (slot == AUDIO_SLOT_START) role = AUDIO_ROLE_START;
-    if (slot == AUDIO_SLOT_FINISH) role = AUDIO_ROLE_FINISH;
+    unsigned role = slot == AUDIO_SLOT_FINISH ? AUDIO_ROLE_FINISH : AUDIO_ROLE_BACKGROUND;
     return (track->roles & role) != 0;
 }
 
@@ -316,10 +311,7 @@ bool audio_select_track(AppSettings *settings, AudioSlot slot, const AudioTrack 
 
     char *dst = settings->background;
     size_t cap = sizeof(settings->background);
-    if (slot == AUDIO_SLOT_START) {
-        dst = settings->start_sound;
-        cap = sizeof(settings->start_sound);
-    } else if (slot == AUDIO_SLOT_FINISH) {
+    if (slot == AUDIO_SLOT_FINISH) {
         dst = settings->finish_sound;
         cap = sizeof(settings->finish_sound);
     }
@@ -330,17 +322,11 @@ bool audio_select_track(AppSettings *settings, AudioSlot slot, const AudioTrack 
 
 void audio_clear_slot(AppSettings *settings, AudioSlot slot) {
     if (!settings) return;
-    if (slot == AUDIO_SLOT_BACKGROUND) settings->background[0] = '\0';
-    else if (slot == AUDIO_SLOT_START) settings->start_sound[0] = '\0';
-    else settings->finish_sound[0] = '\0';
+    if (slot == AUDIO_SLOT_FINISH) settings->finish_sound[0] = '\0';
+    else settings->background[0] = '\0';
     settings_save(settings);
 }
 
 const char *audio_slot_name(AudioSlot slot) {
-    switch (slot) {
-        case AUDIO_SLOT_BACKGROUND: return "Background music";
-        case AUDIO_SLOT_START: return "Start sound";
-        case AUDIO_SLOT_FINISH: return "Completion sound";
-        default: return "Audio";
-    }
+    return slot == AUDIO_SLOT_FINISH ? "Completion sound" : "Background music";
 }
