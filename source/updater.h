@@ -1,26 +1,14 @@
-#ifndef PRELUDE_UPDATER_H
-#define PRELUDE_UPDATER_H
+#ifndef PRELUDE_UPDATER_INSTALLER_H
+#define PRELUDE_UPDATER_INSTALLER_H
 
-#include <switch.h>
+#include <stdbool.h>
+#include <stddef.h>
 
-#define PRELUDE_TARGET_PATH "sdmc:/switch/nextendo.nro"
-#define UPDATER_DATA_DIR    "sdmc:/switch/Prelude-Updater"
-#define UPDATER_STATE_PATH  UPDATER_DATA_DIR "/installed_version.txt"
+#include "releases.h"
 
-typedef struct {
-    bool ok;
-    bool target_exists;
-    bool installed_version_known;
-    bool update_available;
-    char installed_tag[32];
-    char latest_tag[32];
-    char download_url[1024];
-    long local_size;
-    long remote_size;
-    int http_status;
-    int net_error;
-    char error[160];
-} UpdateInfo;
+#define PRELUDE_TARGET_PATH  "sdmc:/switch/nextendo.nro"
+#define SELF_TARGET_FALLBACK "sdmc:/switch/Prelude-Updater/prelude-updater.nro"
+#define PRELUDE_STATE_PATH   "sdmc:/switch/Prelude-Updater/installed_version.txt"
 
 typedef enum {
     UPDATE_OK = 0,
@@ -36,10 +24,22 @@ typedef enum {
 
 typedef bool (*UpdaterProgressCallback)(long downloaded, long total, void *user);
 
-UpdateInfo updater_check(void);
-UpdateResult updater_install(const UpdateInfo *info,
-                             UpdaterProgressCallback progress_cb,
-                             void *progress_user);
+bool updater_current_version(ReleaseTarget target,
+                             char *tag,
+                             size_t tag_cap,
+                             bool *target_exists,
+                             const char *self_path);
+
+const char *updater_action_for(const ReleaseEntry *release,
+                               const char *current_tag,
+                               bool target_exists);
+
+UpdateResult updater_install_release(ReleaseTarget target,
+                                     const ReleaseEntry *release,
+                                     const char *self_path,
+                                     UpdaterProgressCallback progress_cb,
+                                     void *progress_user);
+
 const char *updater_result_string(UpdateResult result);
 
 #endif

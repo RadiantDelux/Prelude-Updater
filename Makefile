@@ -1,5 +1,5 @@
 # Prelude Updater - Nintendo Switch homebrew
-# Requires devkitA64 + libnx + switch-curl + switch-sdl2 + switch-sdl2_ttf.
+# Requires devkitA64, libnx, switch-curl, SDL2, SDL2_ttf and SDL2_mixer.
 
 .SUFFIXES:
 
@@ -16,16 +16,15 @@ SOURCES  := source
 INCLUDES := source
 ROMFS    := romfs
 
-# NRO metadata shown by hbmenu.
 APP_TITLE   := Prelude Updater
 APP_AUTHOR  := RadiantDelux
-APP_VERSION := 1.2.0
+APP_VERSION := 1.3.0
 APP_ICON    := $(TOPDIR)/icon.jpg
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 PKGCONF := PKG_CONFIG_PATH=$(PORTLIBS)/lib/pkgconfig pkg-config
-PORTLIB_CFLAGS := $(shell $(PKGCONF) --cflags SDL2_ttf libcurl 2>/dev/null)
-PORTLIB_LIBS   := $(shell $(PKGCONF) --static --libs SDL2_ttf libcurl 2>/dev/null)
+PORTLIB_CFLAGS := $(shell $(PKGCONF) --cflags SDL2_ttf SDL2_mixer libcurl 2>/dev/null)
+PORTLIB_LIBS   := $(shell $(PKGCONF) --static --libs SDL2_ttf SDL2_mixer libcurl 2>/dev/null)
 
 CFLAGS := -g -Wall -Wextra -O2 -ffunction-sections -fstack-protector-strong -D_FORTIFY_SOURCE=2 $(ARCH) $(DEFINES)
 CFLAGS += $(INCLUDE) $(PORTLIB_CFLAGS) -D__SWITCH__
@@ -59,8 +58,6 @@ export INCLUDE := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
                   -I$(CURDIR)/$(BUILD)
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
-# The NACP must be explicitly embedded in the NRO; otherwise hbmenu cannot show
-# APP_TITLE / APP_AUTHOR / APP_VERSION even if the .nacp file was generated.
 export NROFLAGS += --icon=$(APP_ICON)
 export NROFLAGS += --nacp=$(CURDIR)/$(TARGET).nacp
 ifneq ($(strip $(ROMFS)),)
