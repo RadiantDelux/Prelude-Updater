@@ -55,8 +55,7 @@ static bool confirm_action(PadState *pad, const char *title, const char *message
     while (appletMainLoop()) {
         u64 down = buttons_down(pad);
         if (down & HidNpadButton_A) return true;
-        if (down & HidNpadButton_B) return false;
-        if (down & HidNpadButton_Plus) return false;
+        if (down & (HidNpadButton_B | HidNpadButton_Plus)) return false;
         sleep_frame();
     }
     return false;
@@ -76,9 +75,7 @@ static bool progress_callback(long downloaded, long total, void *user) {
 }
 
 static const char *current_audio_file(const AppSettings *settings, AudioSlot slot) {
-    if (slot == AUDIO_SLOT_BACKGROUND) return settings->background;
-    if (slot == AUDIO_SLOT_START) return settings->start_sound;
-    return settings->finish_sound;
+    return slot == AUDIO_SLOT_FINISH ? settings->finish_sound : settings->background;
 }
 
 static size_t filter_tracks(const AudioCatalog *catalog,
@@ -146,8 +143,6 @@ static bool choose_audio_track(PadState *pad,
             }
 
             audio_apply_settings(settings);
-            if (slot == AUDIO_SLOT_START) audio_play_start();
-            if (slot == AUDIO_SLOT_FINISH) audio_play_finish();
         }
 
         sleep_frame();
@@ -169,12 +164,12 @@ static bool music_menu(PadState *pad, AppSettings *settings) {
 
         if (down & HidNpadButton_Plus) return false;
         if (down & HidNpadButton_B) return true;
-        if (down & HidNpadButton_Up) selected = wrap_index(selected - 1, 5);
-        if (down & HidNpadButton_Down) selected = wrap_index(selected + 1, 5);
+        if (down & HidNpadButton_Up) selected = wrap_index(selected - 1, 4);
+        if (down & HidNpadButton_Down) selected = wrap_index(selected + 1, 4);
 
         if (down & HidNpadButton_A) {
-            if (selected == 4) return true;
-            if (selected == 3) {
+            if (selected == 3) return true;
+            if (selected == 2) {
                 ui_draw_checking("Music & sounds", "Refreshing catalog from GitHub...");
                 catalog = audio_catalog_fetch();
                 continue;
@@ -186,7 +181,7 @@ static bool music_menu(PadState *pad, AppSettings *settings) {
                 continue;
             }
 
-            AudioSlot slot = (AudioSlot)selected;
+            AudioSlot slot = selected == 0 ? AUDIO_SLOT_BACKGROUND : AUDIO_SLOT_FINISH;
             if (!choose_audio_track(pad, settings, &catalog, slot)) return false;
         }
         sleep_frame();
@@ -227,7 +222,6 @@ static bool release_menu(PadState *pad,
                      action, releases_target_name(target), release->tag);
             if (!confirm_action(pad, action, message)) continue;
 
-            audio_play_start();
             ProgressUi progress = { pad, action, release->tag };
             ui_draw_progress(action, release->tag, 0, release->size, true, true);
             UpdateResult result = updater_install_release(target,
@@ -235,7 +229,9 @@ static bool release_menu(PadState *pad,
                                                           self_path,
                                                           progress_callback,
                                                           &progress);
-            if (result == UPDATE_OK || result == UPDATE_ERR_STATE) audio_play_finish();
+            if (result == UPDATE_OK || result == UPDATE_ERR_STATE) {
+                audio_play_finish();
+            }
             ui_draw_operation_result(target, release, action, result);
 
             if (!wait_back_or_exit(pad)) return false;
