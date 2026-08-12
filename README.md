@@ -39,14 +39,6 @@ background,start
 
 Supported extensions are `.ogg`, `.mp3` and `.wav`.
 
-Example:
-
-```text
-menu-night|background|Night Menu|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/menu-night.ogg
-update-start|start|Update Start|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/update-start.ogg
-update-done|finish|Update Complete|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/update-done.ogg
-```
-
 When a track is selected for the first time, it is downloaded to:
 
 ```text
@@ -77,17 +69,23 @@ GitHub Actions also builds the NRO using the devkitPro devkita64 container.
 
 ## Install
 
-Recommended layout:
+For normal installation, download `Prelude-Updater-v1.3.0.zip` from Releases and extract it directly to the root of the SD card. The package already contains:
 
 ```text
-/switch/Prelude-Updater/prelude-updater.nro
+switch/
+└── Prelude-Updater/
+    ├── prelude-updater.nro
+    └── music/
+        └── bundled base tracks
 ```
 
-Prelude itself is installed/managed at:
+Prelude itself is installed and managed at:
 
 ```text
 /switch/nextendo.nro
 ```
+
+The standalone `prelude-updater.nro` release asset is kept for the updater's built-in self-update system.
 
 ## License
 
