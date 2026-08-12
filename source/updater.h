@@ -9,9 +9,13 @@
 #define PRELUDE_TARGET_PATH  "sdmc:/switch/nextendo.nro"
 #define SELF_TARGET_FALLBACK "sdmc:/switch/Prelude-Updater/prelude-updater.nro"
 #define PRELUDE_STATE_PATH   "sdmc:/switch/Prelude-Updater/installed_version.txt"
+#define SELF_STAGE_PATH      "sdmc:/switch/Prelude-Updater/prelude-updater.stage.nro"
+#define SELF_BACKUP_PATH     "sdmc:/switch/Prelude-Updater/prelude-updater.nro.bak"
+#define SELF_PENDING_PATH    "sdmc:/switch/Prelude-Updater/self-update.pending"
 
 typedef enum {
     UPDATE_OK = 0,
+    UPDATE_SELF_RESTART,
     UPDATE_ERR_NETWORK,
     UPDATE_ERR_HTTP,
     UPDATE_ERR_SIZE,
@@ -19,7 +23,8 @@ typedef enum {
     UPDATE_ERR_BACKUP,
     UPDATE_ERR_INSTALL,
     UPDATE_ERR_STATE,
-    UPDATE_ERR_CANCELLED
+    UPDATE_ERR_CANCELLED,
+    UPDATE_ERR_CHAINLOAD
 } UpdateResult;
 
 typedef bool (*UpdaterProgressCallback)(long downloaded, long total, void *user);
@@ -40,6 +45,8 @@ UpdateResult updater_install_release(ReleaseTarget target,
                                      UpdaterProgressCallback progress_cb,
                                      void *progress_user);
 
+bool updater_finish_self_update(const char *stage_path);
+void updater_cleanup_self_update(void);
 const char *updater_result_string(UpdateResult result);
 
 #endif
