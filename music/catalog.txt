@@ -6,8 +6,10 @@
 # roles can be: background, start, finish, all
 # Multiple roles can be comma-separated.
 # Supported file extensions: .ogg, .mp3, .wav
-#
-# Example after you upload your audio files to this repository:
-# menu-night|background|Night Menu|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/menu-night.ogg
-# update-start|start|Update Start|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/update-start.ogg
-# update-done|finish|Update Complete|RadiantDelux|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/update-done.ogg
+
+catalogue-orders-miitopia|all|Catalogue Orders - Miitopia|Nintendo|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/Catalogue%20Orders%20-%20Miitopia.mp3
+settings-wii-sports-resort|all|Settings - Wii Sports Resort|Nintendo|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/Settings%20-%20Wii%20Sports%20Resort.mp3
+sm64-dire-dire-docks|all|Super Mario 64 - Dire, Dire Docks|Nintendo|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/Super%20Mario%2064%20-%20Dire%2C%20Dire%20Docks.mp3
+sm64-staff-roll|all|Super Mario 64 - Staff Roll|Nintendo|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/Super%20Mario%2064%20-%20Staff%20Roll.mp3
+wave-race-64-config|all|Wave Race 64 - Config|Nintendo|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/Wave%20Race%2064%20-%20Config.mp3
+scizzie-aquatic-ambience|all|aquatic ambience|scizzie|https://raw.githubusercontent.com/RadiantDelux/Prelude-Updater/main/music/scizzie%20-%20aquatic%20ambience.mp3
