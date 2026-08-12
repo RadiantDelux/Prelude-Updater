@@ -1,10 +1,12 @@
-# Prelude Updater v1.3.0
+# Prelude Updater v1.4.0
 
-First public release of Prelude Updater.
+Audio behavior and polish update.
 
 ## Installation
 
-Download `Prelude-Updater-v1.3.0.zip` and extract it directly to the root of your SD card. The archive already contains the expected folder layout:
+Download `Prelude-Updater-v1.4.0.zip` and extract it directly to the root of your SD card.
+
+The package includes:
 
 ```text
 switch/
@@ -19,24 +21,19 @@ switch/
         └── scizzie - aquatic ambience.mp3
 ```
 
-No manual folder creation is required.
+## Changes
 
-## Highlights
-
-- Browse Prelude's GitHub release history directly on the Switch.
-- Update, downgrade or reinstall any compatible Prelude release.
-- Browse Prelude Updater releases and update, downgrade or reinstall the updater itself.
-- Background music support through a remote GitHub-hosted catalog.
-- Six base music tracks are included in the release package and can be selected immediately.
-- Separate selectable sounds for the start and completion of updates or downgrades.
-- Additional OGG, MP3 and WAV tracks can be downloaded from the remote catalog.
-- Safe NRO replacement with temporary download, size validation, backup and recovery.
-- Rounded in-app logo, English UI and explicit hbmenu metadata.
+- Removed the separate Start Sound setting.
+- Background Music is now the only music that starts during normal app use.
+- Selecting a Completion Sound no longer previews or plays it immediately.
+- Completion Sound only plays after a successful update, downgrade or reinstall.
+- When Completion Sound begins, the current background music is stopped first so the tracks never overlap.
+- Old `start` catalog roles are treated as background music for compatibility.
+- Existing v1.3.0 settings files are migrated automatically by ignoring the old `start_sound` value.
+- Self-update, downgrade and reinstall support remains available for Prelude Updater itself.
 
 ## SD card paths
 
 - Prelude: `/switch/nextendo.nro`
 - Prelude Updater: `/switch/Prelude-Updater/prelude-updater.nro`
 - Updater settings/music/cache: `/switch/Prelude-Updater/`
-
-For self-updates, restart Prelude Updater after installing another updater version.

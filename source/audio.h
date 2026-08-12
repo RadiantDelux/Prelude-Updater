@@ -9,12 +9,10 @@
 #define AUDIO_TRACK_LIMIT 32
 
 #define AUDIO_ROLE_BACKGROUND (1u << 0)
-#define AUDIO_ROLE_START      (1u << 1)
-#define AUDIO_ROLE_FINISH     (1u << 2)
+#define AUDIO_ROLE_FINISH     (1u << 1)
 
 typedef enum {
     AUDIO_SLOT_BACKGROUND = 0,
-    AUDIO_SLOT_START,
     AUDIO_SLOT_FINISH
 } AudioSlot;
 
@@ -41,7 +39,6 @@ typedef bool (*AudioProgressCallback)(long downloaded, long total, void *user);
 bool audio_init(const AppSettings *settings);
 void audio_exit(void);
 void audio_apply_settings(const AppSettings *settings);
-void audio_play_start(void);
 void audio_play_finish(void);
 
 AudioCatalog audio_catalog_fetch(void);

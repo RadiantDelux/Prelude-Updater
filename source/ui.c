@@ -72,8 +72,8 @@ static void round_rect(int x, int y, int w, int h, int r, SDL_Color c) {
     circle(x + w - r - 1, y + h - r - 1, r, c);
 }
 
-static SDL_Surface *text_surface(TTF_Font *font, const char *text, SDL_Color c) {
-    return font && text && *text ? TTF_RenderUTF8_Blended(font, text, c) : NULL;
+static SDL_Surface *text_surface(TTF_Font *font, const char *value, SDL_Color c) {
+    return font && value && *value ? TTF_RenderUTF8_Blended(font, value, c) : NULL;
 }
 
 static void blit(SDL_Surface *surface, int x, int y) {
@@ -92,28 +92,28 @@ static void text(TTF_Font *font, const char *value, int x, int y, SDL_Color c) {
 }
 
 static void text_right(TTF_Font *font, const char *value, int right, int y, SDL_Color c) {
-    SDL_Surface *s = text_surface(font, value, c);
-    if (!s) return;
-    blit(s, right - s->w, y);
+    SDL_Surface *surface = text_surface(font, value, c);
+    if (!surface) return;
+    blit(surface, right - surface->w, y);
 }
 
 static void text_center(TTF_Font *font, const char *value, int cx, int y, SDL_Color c) {
-    SDL_Surface *s = text_surface(font, value, c);
-    if (!s) return;
-    blit(s, cx - s->w / 2, y);
+    SDL_Surface *surface = text_surface(font, value, c);
+    if (!surface) return;
+    blit(surface, cx - surface->w / 2, y);
 }
 
 static void text_center_xy(TTF_Font *font, const char *value, int cx, int cy, SDL_Color c) {
-    SDL_Surface *s = text_surface(font, value, c);
-    if (!s) return;
-    blit(s, cx - s->w / 2, cy - s->h / 2);
+    SDL_Surface *surface = text_surface(font, value, c);
+    if (!surface) return;
+    blit(surface, cx - surface->w / 2, cy - surface->h / 2);
 }
 
 static void text_wrapped(const char *value, int y) {
     if (!value || !*value) return;
-    SDL_Surface *s = TTF_RenderUTF8_Blended_Wrapped(ui.lg, value, TEXT, 940);
-    if (!s) return;
-    blit(s, 640 - s->w / 2, y);
+    SDL_Surface *surface = TTF_RenderUTF8_Blended_Wrapped(ui.lg, value, TEXT, 940);
+    if (!surface) return;
+    blit(surface, 640 - surface->w / 2, y);
 }
 
 static TTF_Font *system_font(int size) {
@@ -125,13 +125,15 @@ static bool inside_round(int x, int y, int w, int h, int r) {
     if ((x >= r && x < w - r) || (y >= r && y < h - r)) return true;
     int cx = x < r ? r : w - r - 1;
     int cy = y < r ? r : h - r - 1;
-    int dx = x - cx, dy = y - cy;
+    int dx = x - cx;
+    int dy = y - cy;
     return dx * dx + dy * dy <= r * r;
 }
 
 static SDL_Texture *load_logo(void) {
     SDL_Surface *src = SDL_LoadBMP(LOGO_PATH);
     if (!src) return NULL;
+
     SDL_Surface *rgba = SDL_ConvertSurfaceFormat(src, SDL_PIXELFORMAT_RGBA32, 0);
     SDL_FreeSurface(src);
     if (!rgba) return NULL;
@@ -230,7 +232,8 @@ bool ui_init(void) {
     ui.window = SDL_CreateWindow("Prelude Updater", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                  SCREEN_W, SCREEN_H, SDL_WINDOW_FULLSCREEN);
     if (!ui.window) return false;
-    ui.renderer = SDL_CreateRenderer(ui.window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    ui.renderer = SDL_CreateRenderer(ui.window, -1,
+                                     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!ui.renderer) return false;
     SDL_RenderSetLogicalSize(ui.renderer, SCREEN_W, SCREEN_H);
     SDL_SetRenderDrawBlendMode(ui.renderer, SDL_BLENDMODE_BLEND);
@@ -273,9 +276,10 @@ void ui_draw_main_menu(int selected) {
     static const char *detail[] = {
         "Update, downgrade or reinstall Nextendo Prelude",
         "Update, downgrade or reinstall Prelude Updater",
-        "Choose background music and update notification sounds",
+        "Choose background music and completion audio",
         "Return to hbmenu"
     };
+
     frame_begin();
     header("Version manager and music settings");
     round_rect(64, 132, 1152, 455, 28, PANEL);
@@ -300,6 +304,7 @@ void ui_draw_release_list(ReleaseTarget target, const ReleaseList *list, int sel
     char subtitle[128];
     snprintf(subtitle, sizeof(subtitle), "%s releases - installed: %s",
              releases_target_name(target), current_tag ? current_tag : "unknown");
+
     frame_begin();
     header(subtitle);
     round_rect(64, 132, 1152, 455, 28, PANEL);
@@ -315,8 +320,10 @@ void ui_draw_release_list(ReleaseTarget target, const ReleaseList *list, int sel
         round_rect(92, y, 1096, 50, 14, index == selected ? SELECTED : PANEL_2);
         if (index == selected) round_rect(92, y, 5, 50, 3, ACCENT);
         text(ui.md, release->tag, 120, y + 9, TEXT);
-        text_right(ui.sm, action, 1152, y + 13, strcmp(action, "Downgrade") == 0 ? YELLOW : MUTED);
+        text_right(ui.sm, action, 1152, y + 13,
+                   strcmp(action, "Downgrade") == 0 ? YELLOW : MUTED);
     }
+
     button(88, "A", "Install selected", GREEN);
     button(320, "B", "Back", RED);
     button(1080, "+", "Exit", KEY_DARK);
@@ -324,18 +331,18 @@ void ui_draw_release_list(ReleaseTarget target, const ReleaseList *list, int sel
 }
 
 void ui_draw_music_menu(const AppSettings *settings, int selected) {
-    const char *title[] = {"Background music", "Start sound", "Completion sound", "Refresh catalog", "Back"};
+    const char *title[] = {"Background music", "Completion sound", "Refresh catalog", "Back"};
     const char *detail[] = {
         settings->background[0] ? settings->background : "Off",
-        settings->start_sound[0] ? settings->start_sound : "Off",
         settings->finish_sound[0] ? settings->finish_sound : "Off",
         "Reload music/catalog.txt from GitHub",
         "Return to the main menu"
     };
+
     frame_begin();
     header("Music & sounds");
     round_rect(64, 132, 1152, 455, 28, PANEL);
-    for (int i = 0; i < 5; ++i) menu_row(148 + i * 82, title[i], detail[i], selected == i);
+    for (int i = 0; i < 4; ++i) menu_row(160 + i * 98, title[i], detail[i], selected == i);
     button(88, "A", "Select", GREEN);
     button(320, "B", "Back", RED);
     button(1080, "+", "Exit", KEY_DARK);
@@ -356,9 +363,11 @@ void ui_draw_track_list(AudioSlot slot, const AudioTrack *const *tracks, size_t 
         int y = 154 + row * 58;
         round_rect(92, y, 1096, 50, 14, item == selected ? SELECTED : PANEL_2);
         if (item == selected) round_rect(92, y, 5, 50, 3, ACCENT);
+
         if (item == 0) {
             text(ui.md, "Off", 120, y + 9, TEXT);
-            if (!current_file || !*current_file) text_right(ui.sm, "Selected", 1152, y + 13, GREEN);
+            if (!current_file || !*current_file)
+                text_right(ui.sm, "Selected", 1152, y + 13, GREEN);
         } else {
             const AudioTrack *track = tracks[item - 1];
             text(ui.md, track->title, 120, y + 9, TEXT);
@@ -367,6 +376,7 @@ void ui_draw_track_list(AudioSlot slot, const AudioTrack *const *tracks, size_t 
                 text_right(ui.sm, "Selected", 1152, y + 13, GREEN);
         }
     }
+
     button(88, "A", "Choose", GREEN);
     button(320, "B", "Back", RED);
     button(1080, "+", "Exit", KEY_DARK);
@@ -377,6 +387,7 @@ void ui_draw_progress(const char *eyebrow, const char *title, long downloaded, l
                       bool cancellable, bool force) {
     Uint32 now = SDL_GetTicks();
     if (!force && ui.progress_tick && now - ui.progress_tick < 100) return;
+
     if (!ui.speed_tick || force) {
         ui.speed_tick = now;
         ui.speed_bytes = downloaded;
@@ -384,7 +395,9 @@ void ui_draw_progress(const char *eyebrow, const char *title, long downloaded, l
     } else if (now - ui.speed_tick >= 350) {
         Uint32 ms = now - ui.speed_tick;
         long delta = downloaded - ui.speed_bytes;
-        if (delta >= 0 && ms) ui.speed_mib = ((double)delta / 1048576.0) / ((double)ms / 1000.0);
+        if (delta >= 0 && ms) {
+            ui.speed_mib = ((double)delta / 1048576.0) / ((double)ms / 1000.0);
+        }
         ui.speed_tick = now;
         ui.speed_bytes = downloaded;
     }
@@ -406,9 +419,13 @@ void ui_draw_progress(const char *eyebrow, const char *title, long downloaded, l
     int width = (int)(1050.0 * ratio);
     if (width > 0) round_rect(110, 318, width, 34, 17, ACCENT);
 
-    if (total > 0) snprintf(detail, sizeof(detail), "%.1f / %.1f MiB", downloaded / 1048576.0, total / 1048576.0);
-    else snprintf(detail, sizeof(detail), "%.1f MiB downloaded", downloaded / 1048576.0);
+    if (total > 0)
+        snprintf(detail, sizeof(detail), "%.1f / %.1f MiB",
+                 downloaded / 1048576.0, total / 1048576.0);
+    else
+        snprintf(detail, sizeof(detail), "%.1f MiB downloaded", downloaded / 1048576.0);
     text(ui.md, detail, 110, 385, TEXT);
+
     if (ui.speed_mib > 0.01) snprintf(speed, sizeof(speed), "%.2f MiB/s", ui.speed_mib);
     else snprintf(speed, sizeof(speed), "Connecting...");
     text_right(ui.md, speed, 1160, 385, MUTED);
@@ -419,6 +436,7 @@ void ui_draw_progress(const char *eyebrow, const char *title, long downloaded, l
 void ui_draw_operation_result(ReleaseTarget target, const ReleaseEntry *release,
                               const char *action, UpdateResult result) {
     bool ok = result == UPDATE_OK || result == UPDATE_ERR_STATE;
+
     frame_begin();
     header(ok ? "Operation complete" : "Operation failed");
     round_rect(64, 132, 1152, 455, 28, PANEL);
@@ -426,13 +444,18 @@ void ui_draw_operation_result(ReleaseTarget target, const ReleaseEntry *release,
     text_center_xy(ui.xl, ok ? "OK" : "!", 640, 271, BG);
 
     char message[200];
-    if (ok) snprintf(message, sizeof(message), "%s %s to %s", releases_target_name(target), action, release->tag);
-    else snprintf(message, sizeof(message), "%s", updater_result_string(result));
+    if (ok)
+        snprintf(message, sizeof(message), "%s %s to %s",
+                 releases_target_name(target), action, release->tag);
+    else
+        snprintf(message, sizeof(message), "%s", updater_result_string(result));
     text_wrapped(message, 360);
+
     if (ok && target == RELEASE_TARGET_UPDATER)
         text_center(ui.sm, "Restart the app to run the selected updater version.", 640, 430, MUTED);
     else if (ok)
         text_center(ui.sm, "/switch/nextendo.nro is ready.", 640, 430, MUTED);
+
     button(1080, "+", "Continue", KEY_DARK);
     frame_end();
 }

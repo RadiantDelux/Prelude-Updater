@@ -17,8 +17,7 @@ static void trim_line(char *line) {
 }
 
 static void copy_setting(char *dst, size_t cap, const char *value) {
-    if (!value) value = "";
-    snprintf(dst, cap, "%s", value);
+    snprintf(dst, cap, "%s", value ? value : "");
 }
 
 bool settings_prepare_dirs(void) {
@@ -44,8 +43,6 @@ void settings_load(AppSettings *settings) {
 
         if (strcmp(line, "background") == 0) {
             copy_setting(settings->background, sizeof(settings->background), equals);
-        } else if (strcmp(line, "start_sound") == 0) {
-            copy_setting(settings->start_sound, sizeof(settings->start_sound), equals);
         } else if (strcmp(line, "finish_sound") == 0) {
             copy_setting(settings->finish_sound, sizeof(settings->finish_sound), equals);
         }
@@ -65,10 +62,8 @@ bool settings_save(const AppSettings *settings) {
 
     bool ok = fprintf(file,
                       "background=%s\n"
-                      "start_sound=%s\n"
                       "finish_sound=%s\n",
                       settings->background,
-                      settings->start_sound,
                       settings->finish_sound) >= 0;
     if (ok) ok = fflush(file) == 0;
     fclose(file);

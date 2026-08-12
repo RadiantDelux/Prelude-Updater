@@ -3,7 +3,7 @@
 # Format:
 # id|roles|title|artist|https-url
 #
-# roles can be: background, start, finish, all
+# roles can be: background, finish, all
 # Multiple roles can be comma-separated.
 # Supported file extensions: .ogg, .mp3, .wav
 
